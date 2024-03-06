@@ -5,10 +5,10 @@ FILES=$(wildcard ./*.hs)
 all: $(TARGET)
 
 run: $(TARGET)
-	./$< -1 tree.txt new_data.txt
+	@./$< -1 tree.txt new_data.txt
 
 train: $(TARGET)
-	./$< -2 train.txt
+	@./$< -2 train.txt
 
 $(TARGET): $(FILES)
 	ghc $(GHC_FLAGS) -o $@ $^

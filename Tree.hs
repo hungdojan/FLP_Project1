@@ -7,8 +7,6 @@
 module Tree
   ( Tree (Leaf, Node),
     getClass,
-    testTree,
-    leafTree,
   )
 where
 
@@ -47,12 +45,6 @@ instance Show (Tree Int Float String) where
 getClass :: [Float] -> Tree Int Float String -> String
 getClass _ (Leaf c) = c
 getClass [] Node {} = error "No leaf found"
-getClass (x : xs) (Node _ th l r)
-  | x < th = getClass xs l
-  | otherwise = getClass xs r
-
-testTree :: Tree Int Float String
-testTree = Node 0 5.5 (Leaf "Class1") (Node 1 3.0 (Leaf "Class2") (Leaf "Class3"))
-
-leafTree :: Tree Int Float String
-leafTree = Leaf "Hello"
+getClass x (Node ix th l r)
+  | x !! ix <= th = getClass x l
+  | otherwise = getClass x r

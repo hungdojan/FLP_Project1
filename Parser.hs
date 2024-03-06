@@ -4,7 +4,7 @@
 -- @author  Hung Do
 -- @date    04/03/2024
 -- @file    Parser.hs
-module Parser (parseLine, strip, split, isInt, isFloat) where
+module Parser (parseLine, strip, split, isInt, isFloat, removeIndent) where
 
 import           Data.Char (isDigit, isSpace)
 import           Data.List (dropWhileEnd, isInfixOf)
@@ -12,8 +12,7 @@ import           Data.List (dropWhileEnd, isInfixOf)
 type ParseResult a b = (Bool, a, b)
 
 data State
-  = Indent
-  | TreeType
+  = TreeType
   | Delim
   | Data
   deriving (Eq)
@@ -39,18 +38,33 @@ isFloat xs =
 nestedPairToTriples :: (a, (b, c)) -> (a, b, c)
 nestedPairToTriples (x, (y, z)) = (x, y, z)
 
--- remove specific char from both sides of the string
+-- | Remove specific `Char` from both sides of the given `String`.
 strip :: (Char -> Bool) -> String -> String
 strip f = dropWhile f . dropWhileEnd f
 
--- code was inspired by an answer from Stack Overflow
--- https://stackoverflow.com/a/4981265
+-- | Split `String` with the given `Char`.
 split :: String -> Char -> [String]
-split str delim = case dropWhile (== delim) str of
-  "" -> []
-  _s -> w : split _xs delim
-    where
-      (w, _xs) = break (== delim) _s
+split "" _ = []
+split str delim = _split str "" []
+    where _split ""  tmpStr l = l ++ [tmpStr]
+          _split (x:xs) tmpStr l
+                | x == delim = _split xs "" (l ++ [tmpStr])
+                | otherwise  = _split xs (tmpStr ++ [x]) l
+
+-- | Function calculates and removes spaces from the beginning of the string.
+-- Returns a pair of `String` and `Int` where:
+--      `String` - The processed string.
+--      `Int`    - Number of spaces (indentation size) removed.
+removeIndent :: String -> (String, Int)
+removeIndent "" = ("", 0)
+removeIndent str@(x : xs)
+  | x /= ' ' = (str, 0)
+  | otherwise = getIndents xs 1
+  where
+    getIndents "" n = ("", n)
+    getIndents _str@(_x : _xs) n
+      | not (isSpace _x) = (_str, n)
+      | otherwise = getIndents _xs (n + 1)
 
 -- ====== END OF UNILS ========
 
@@ -74,21 +88,6 @@ separateSame orig@(x : xs) (y : ys)
     parseLbl _x _xs@(h1 : t1) _ys@(h2 : t2)
       | h1 == h2 = parseLbl (_x ++ [h1]) t1 t2
       | otherwise = (_x, _xs)
-
--- | Function calculates and removes spaces from the beginning of the string.
--- Returns a pair of `String` and `Int` where:
---      `String` - The processed string.
---      `Int`    - Number of spaces (indentation size) removed.
-parseIndent :: String -> (String, Int)
-parseIndent "" = ("", 0)
-parseIndent str@(x : xs)
-  | x /= ' ' = (str, 0)
-  | otherwise = getIndents xs 1
-  where
-    getIndents "" n = ("", n)
-    getIndents _str@(_x : _xs) n
-      | not (isSpace _x) = (_str, n)
-      | otherwise = getIndents _xs (n + 1)
 
 -- | Check if the given `String` starts with
 -- a valid `Tree` constructor label (defined in Tree module).
@@ -156,9 +155,6 @@ getLeafData str = (True, str, "")
 --      `[String]` - List of tokens that where extracted by the parser.
 parseByState :: State -> String -> [String] -> IO (Bool, [String])
 parseByState state str l
-  | state == Indent = do
-      let (_s, _i) = parseIndent str
-      parseByState TreeType _s l
   | state == TreeType = do
       let (res, parseData, restData) = getTreeType str
       if not res
@@ -194,4 +190,4 @@ parseByState state str l
 --      `Bool`     - The given string has a correct data.
 --      `[String]` - List of tokens that where extracted by the parser.
 parseLine :: String -> IO (Bool, [String])
-parseLine str = do parseByState Indent str []
+parseLine str = do parseByState TreeType str []
