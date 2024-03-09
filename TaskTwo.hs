@@ -116,8 +116,8 @@ giniForFeature :: [SingleData] -> Int -> Int -> IO (Float, FeatureData)
 giniForFeature sds ix len = do
   let features :: [Float] = toSet $ getFeaturesAt sds ix len
   ginis <- forM features $ \threshold -> do
-    let less = [y | y <- sds, (head . fst) y <= threshold]
-        greater = [y | y <- sds, (head . fst) y > threshold]
+    let less = [y | y <- sds, ((!! ix) . fst) y <= threshold]
+        greater = [y | y <- sds, ((!! ix) . fst) y > threshold]
     giniValue <- giniForDataset less greater
     return (giniValue, (threshold, less, greater))
   let minGini = minGiniInpurity ginis
