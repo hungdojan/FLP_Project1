@@ -1,0 +1,4 @@
+root = true
+
+[*.hs]
+trim_trailing_whitespace = true

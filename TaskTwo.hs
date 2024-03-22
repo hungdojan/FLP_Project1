@@ -6,7 +6,9 @@
 -- @file    TaskTwo.hs
 module TaskTwo where
 
-import           Control.Monad (forM, unless)
+import           Control.Arrow ((&&&))
+import           Control.Monad (unless)
+import           Data.List     (group, sort, sortBy)
 import           Data.Maybe    (fromJust, isNothing)
 import           Parser        (split, strip)
 import           Tree
@@ -15,25 +17,26 @@ type SingleData = ([Float], String)
 
 type ClassPercentage = (String, Float)
 
-type FeatureData = (Int, (Float, [SingleData], [SingleData]))
+type TreeWrapper = (Int, Float, [SingleData], [SingleData])
 
 -- | Extract data from the given `String`.
-extractDataTaskTwo :: String -> IO SingleData
-extractDataTaskTwo str = do
-  let splitData = map (strip (== ' ')) $ split str ','
-      -- class is the last string in the list
-      className = head $ take 1 $ reverse splitData
-      -- thresholds are converted to `Float`
-      thresholds = map (\x -> (read x :: Float)) $ init splitData
-  return (thresholds, className)
+extractDataSet :: String -> SingleData
+extractDataSet str = _toSingleData _splitData
+  where
+    _splitData = map (strip (== ' ')) $ split str ','
+    _toSingleData [] = ([], "")
+    _toSingleData lst = (_features, _class)
+      where
+        _features = map (read :: String -> Float) (init lst)
+        _class = last lst
 
 -- | Validate feature list length (all the `SingleData` contains the same
 -- number of features).
 validateFeatureList :: [SingleData] -> Bool
 validateFeatureList [] = True
-validateFeatureList sd = length (toSet getFeatures) == 1
+validateFeatureList sd = length _featureLenSet == 1 && head _featureLenSet > 0
   where
-    getFeatures = map (length . fst) sd
+    _featureLenSet = toSet $ map (length . fst) sd
 
 -- | Remove duplicate data from the list.
 toSet :: (Ord a) => [a] -> [a]
@@ -42,118 +45,151 @@ toSet (x : xs)
   | x `elem` xs = toSet xs
   | otherwise = x : toSet xs
 
--- | Check if given `SingleData` has any features left.
-isEmptyFeatures :: SingleData -> Bool
-isEmptyFeatures ([], _) = True
-isEmptyFeatures _       = False
+-- | Calculates a threshold value as an average of neighbor thresholds.
+-- Args:
+--    `[Float]` - List of thresholds.
+-- Returns:
+--    `[Float]` - New range of thresholds.
+calculateMiddleThreshold :: [Float] -> [Float]
+calculateMiddleThreshold [] = []
+calculateMiddleThreshold [a] = [a]
+calculateMiddleThreshold (x : y : xs) = ((x + y) / 2) : calculateMiddleThreshold (y : xs)
 
--- | Return a list of features for the given feature index in `SingleData`.
+-- | Return a list of middle threshold for the given feature index in `SingleData`.
 -- Takes three arguments:
 --    `[SingleData]` - The whole dataset.
 --    `Int`          - Chosen index of the feature.
---    `Int`          - Total number of features.
-getFeaturesAt :: [SingleData] -> Int -> Int -> [Float]
-getFeaturesAt sd ix len
-  | ix >= len = []
-  | otherwise = map ((!! ix) . fst) sd
+getMidThresholdAt :: [SingleData] -> Int -> [Float]
+getMidThresholdAt sd ix = calculateMiddleThreshold $ sort $ map ((!! ix) . fst) sd
 
 -- | Get list of class names within the dataset.
 getClassNames :: [SingleData] -> [String]
 getClassNames [] = []
 getClassNames xs = toSet $ map snd xs
 
--- | Get percentage of occurrence of each class in the given dataset.
--- Returns a pair of `String` and `Float` where:
---    `String` - Class name.
---    `Float`  - Percentage of occurrence (< 1.0).
-getClassPercentage :: [SingleData] -> IO [ClassPercentage]
-getClassPercentage [] = return []
-getClassPercentage sd@(h : _)
-  | isEmptyFeatures h = return []
-  | otherwise = do
-      let _totalCount = length sd
-      forM (getClassNames sd) $ \x -> do
-        -- get number of occurrence of the class `x`
-        let _count = length [head v | (v, cl) <- sd, cl == x]
-        -- calculates with the formula (count / total)
-        return (x, fromIntegral _count / fromIntegral _totalCount)
+-- | Get a percentage occurrence for each class.
+getOccurrence :: Int -> [SingleData] -> [ClassPercentage]
+getOccurrence len dx = map (\(x, y) -> (x, fromIntegral y / fromIntegral len)) getCounts
+  where
+    _popClassName (_, cn) = cn
+    getCounts = map (head &&& length) $ group . sort $ map _popClassName dx
 
 -- | Calculate Gini value for the given dataset.
 -- The Gini formula is: 1 - sum([x**2 for x in `percentage`])
 -- where percentage is the percentage of occurrence of the given class
 -- in the dataset.
 calculateGiniScore :: [ClassPercentage] -> Float
-calculateGiniScore lcp = 1 - foldr ((+) . (** 2) . snd) 0 lcp
+calculateGiniScore lofCP = 1 - foldr ((+) . (** 2) . snd) 0 lofCP
 
--- | Calculate weighted sum of Gini indices for the chosen datasets.
--- Takes two data sets. Returns their Gini index value.
-giniForDataset :: [SingleData] -> [SingleData] -> IO Float
-giniForDataset xs ys = do
-  let xsSizeF :: Float = fromIntegral $ length xs
-      ysSizeF :: Float = fromIntegral $ length ys
-      totalSizeF :: Float = xsSizeF + ysSizeF
-  xPerc <- getClassPercentage xs
-  yPerc <- getClassPercentage ys
-  -- calculates the weighted sum of all classes for the selected datasets
-  -- the formula: sum([giniScore(dataset) * weight(dataset)
-  --                   for dataset in datasets])
-  return $
-    ( calculateGiniScore xPerc * xsSizeF
-        + calculateGiniScore yPerc * ysSizeF
-    )
-      / totalSizeF
+-- | Split sorted dataset based on the given feature index.
+-- The list (dataset) is split into two sublists where the first sublist contains
+-- `SingleData` where its feature value is less than the given feature threshold.
+-- The rest of data will be moved into the second sublist.
+-- Args:
+--    `[SingleData]` - Given dataset.
+--    `Int` - Feature index.
+--    `Float` - Feature threshold.
+-- Returns:
+--    `[[SingleData]]` - A list that contains 2 sublists.
+splitSortedDataSet :: [SingleData] -> Int -> Float -> [[SingleData]]
+splitSortedDataSet [] _ _ = [[], []]
+splitSortedDataSet xs ix th = helpFunc [] xs
+  where
+    helpFunc _l [] = [_l, []]
+    helpFunc _l _ll@(_x : _xs)
+      | ((!! ix) . fst) _x <= th = helpFunc (_x : _l) _xs
+      | otherwise = [_l, _ll]
 
--- | Search and calculate the smallest Gini index value for the given
--- feature index.
--- Takes 3 arguments:
---    `[SingleData]` - The whole data set.
---    `Int`          - Index of the feature.
---    `Int`          - Total number of features.
--- Returns a pair of `Float` and `FeatureData` where
---    `Float`       - Gini index value of the found dataset separation.
---    `FeatureData` - Feature data for the found dataset separation.
-giniForFeature :: [SingleData] -> Int -> Int -> IO (Float, FeatureData)
-giniForFeature sds ix len = do
-  let features :: [Float] = toSet $ getFeaturesAt sds ix len
-  ginis <- forM features $ \threshold -> do
-    let less = [y | y <- sds, ((!! ix) . fst) y <= threshold]
-        greater = [y | y <- sds, ((!! ix) . fst) y > threshold]
-    giniValue <- giniForDataset less greater
-    return (giniValue, (threshold, less, greater))
-  let minGini = minGiniInpurity ginis
-  return (fst minGini, (ix, snd minGini))
+-- | Sort the dataset on the given feature index.
+sortByFeature :: [SingleData] -> Int -> [SingleData]
+sortByFeature sd ix = sortBy cmpFnc sd
+  where
+    cmpFnc (f, _) (s, _) = compare (f !! ix) (s !! ix)
 
--- | Find min Gini index value.
-minGiniInpurity :: (Ord a) => [(a, b)] -> (a, b)
-minGiniInpurity [] = error "Nothing found"
-minGiniInpurity [x] = x
-minGiniInpurity (x : xs) = _getMin x xs
+-- | Calculate Gini index value for the given dataset split.
+-- Args:
+--    `Int` - Feature index.
+--    `Float` - Feature threshold.
+--    `[[SingleData]]` - Split dataset.
+-- Returns:
+--    `(Float, TreeWrapper)` - A pair where:
+--        `Float` - Calculated Gini index value.
+--        `TreeWrapper` - Data format ready to create a Tree structure.
+_giniForSplit :: Int -> Float -> [[SingleData]] -> (Float, TreeWrapper)
+_giniForSplit _ _ [] = (20, (0, 0, [], []))
+_giniForSplit _ _ [_] = (20, (0, 0, [], []))
+_giniForSplit ix th dss@(l : r : _) = (_calculateGini, (ix, th, l, r))
+  where
+    _calculateGini = sum (map _calculateWeightedSum dss) / fromIntegral (sum (map length dss))
+    _calculateWeightedSum d =
+      let len = length d
+       in (fromIntegral len * (calculateGiniScore . getOccurrence len) d)
+
+-- | Calculate Gini index value for the chosen feature threshold in the dataset.
+-- First it does the dataset split and then it calculates the value.
+-- Args:
+--    `[SingleData]` - Given dataset.
+--    `Int` - Feature index.
+--    `Float` - Feature threshold.
+-- Returns:
+--    `(Float, TreeWrapper)` - A pair where:
+--        `Float` - Calculated Gini index value.
+--        `TreeWrapper` - Data format ready to create a Tree structure.
+_giniForThreshold :: [SingleData] -> Int -> Float -> (Float, TreeWrapper)
+_giniForThreshold ds ix th = _giniForSplit ix th $ splitSortedDataSet (sortByFeature ds ix) ix th
+
+-- | Find the split with the smallest Gini index value in the chosen feature index.
+_minGiniForFeature :: [SingleData] -> Int -> (Float, TreeWrapper)
+_minGiniForFeature [] _ = (20, (0, 0, [], []))
+--
+_minGiniForFeature ds ix = minFirst $ map (_giniForThreshold ds ix) _features
+  where
+    _features = toSet $ getMidThresholdAt ds ix
+
+-- | Find min Gini index value. Expecting the first element of the tuple to be
+-- the Gini index value.
+minFirst :: (Ord a) => [(a, b)] -> (a, b)
+minFirst [] = error "Nothing found"
+minFirst [x] = x
+minFirst (x : xs) = _getMin x xs
   where
     _getMin _x [] = _x
     _getMin (_x, pair1) ((v, pair2) : ys)
       | _x <= v = _getMin (_x, pair1) ys
       | otherwise = _getMin (v, pair2) ys
 
--- | Train a model on the given dataset.
-trainOnDataSet :: [SingleData] -> Int -> IO (Maybe (Tree Int Float String))
-trainOnDataSet [] _ = return Nothing
-trainOnDataSet sd len
-  | length (getClassNames sd) == 1 = return $ Just $ Leaf $ head $ getClassNames sd
-  | otherwise = do
-      featureIndices <- forM [0 .. (len - 1)] $ \x -> giniForFeature sd x len
-      let (_, smallestGini) = minGiniInpurity featureIndices
-          (ix, (th, l, r)) = smallestGini
-      leftChild <- trainOnDataSet l len
-      rightChild <- trainOnDataSet r len
-      if isNothing leftChild || isNothing rightChild
-        then return Nothing
-        else return $ Just $ Node ix th (fromJust leftChild) (fromJust rightChild)
+-- | Check if there is only one class left in the given dataset.
+isSingleClass :: [SingleData] -> Bool
+isSingleClass [] = True
+isSingleClass (x : xs) = isSameClass xs (snd x)
+  where
+    isSameClass [] _ = True
+    isSameClass (_x : _xs) lbl
+      | snd _x /= lbl = False
+      | otherwise = isSameClass _xs lbl
+
+-- | Train and construct a decision tree using Gini index.
+-- Args:
+--    `[SingleData]` - Given dataset.
+--    `Int` - Number of features.
+train :: [SingleData] -> Int -> Maybe (Tree Int Float String)
+train [] _ = Nothing
+train sd fLen
+  | isSingleClass sd = Just $ Leaf $ (snd . head) sd
+  | isNothing leftTree || isNothing rightTree = Nothing
+  | otherwise = Just $ Node ix th (fromJust leftTree) (fromJust rightTree)
+  where
+    (_, (ix, th, l, r)) = minFirst $ map (_minGiniForFeature sd) [0 .. (fLen - 1)]
+    leftTree = train l fLen
+    rightTree = train r fLen
 
 -- | Task 2 logic.
 taskTwo :: FilePath -> IO ()
 taskTwo fInput = do
   fileContent <- readFile fInput
-  ds <- forM (lines fileContent) extractDataTaskTwo
+  -- extract data and ignore empty lines
+  let ds = map extractDataSet $ filter (/= "") $ lines fileContent
   unless (validateFeatureList ds) (error "Features not aligned")
-  tree <- trainOnDataSet ds ((length . fst . head) ds)
-  print $ fromJust tree
+  case train ds ((length . fst . head) ds) of
+    Nothing  -> print "Error while training"
+    (Just t) -> print t

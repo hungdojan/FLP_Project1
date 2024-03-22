@@ -22,17 +22,25 @@ data State
 -- inspired by a function from stack overflow
 -- https://stackoverflow.com/a/30029670
 isInt :: String -> Bool
-isInt ""  = False
-isInt str = dropWhile isDigit str == ""
+isInt ""       = False
+isInt ('-':xs) = dropWhile isDigit xs == ""
+isInt str      = dropWhile isDigit str == ""
 
 isFloat :: String -> Bool
 isFloat "" = False
 isFloat "." = False
+isFloat ('-':xs) = isFloat xs
 isFloat xs =
   case dropWhile isDigit xs of
     ""         -> True
-    ('.' : ys) -> all isDigit ys
+    ('.' : ys) -> isDecimal ys
     _          -> False
+  where
+    isDecimal ys = case dropWhile isDigit ys of
+                  ""                -> True
+                  ('e' : '-' : yss) -> all isDigit yss
+                  ('e' : yss)       -> all isDigit yss
+                  _                 -> False
 
 -- | Convert a nested pair in a pair to a triple.
 nestedPairToTriples :: (a, (b, c)) -> (a, b, c)

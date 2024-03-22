@@ -42,10 +42,10 @@ createNodeFromData h (_ : fData : th : _) n = do
 --    `Int`      - A node height used by `loadTreeFromFile`.
 -- Returns a `Just Leaf` constructor if a tree was successfully reconstructed,
 -- otherwise `Nothing`.
-createLeafFromData :: [String] -> IO (Maybe (Tree Int Float String))
-createLeafFromData []                  = return Nothing
-createLeafFromData [_]                 = return Nothing
-createLeafFromData (_ : className : _) = return $ Just $ Leaf className
+createLeafFromData :: [String] -> Maybe (Tree Int Float String)
+createLeafFromData []                  = Nothing
+createLeafFromData [_]                 = Nothing
+createLeafFromData (_ : className : _) = Just $ Leaf className
 
 loadTreeFromFile :: Handle -> Int -> IO (Maybe (Tree Int Float String))
 loadTreeFromFile handle lvl = do
@@ -61,13 +61,17 @@ loadTreeFromFile handle lvl = do
       if valid && lvl == indentSize `div` 2
         then do
           if tType == "Leaf"
-            then createLeafFromData _data
+            then return $ createLeafFromData _data
             else
               if tType == "Node"
                 then do
                   createNodeFromData handle _data lvl
-                else return Nothing -- error "Tree type not recognized"
-        else return Nothing -- error "Invalid input file"
+                else do
+                  print line
+                  return Nothing -- error "Tree type not recognized"
+        else do
+          print line
+          return Nothing -- error "Invalid input file"
 
 -- | Task 1 logic.
 taskOne :: FilePath -> FilePath -> IO ()

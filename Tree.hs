@@ -3,6 +3,7 @@
 -- @author  Hung Do
 -- @date    04/03/2024
 -- @file    Tree.hs
+{-# LANGUAGE FlexibleInstances #-}
 
 module Tree
   ( Tree (Leaf, Node),
