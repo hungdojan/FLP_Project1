@@ -1,5 +1,5 @@
 TARGET=flp-fun
-GHC_FLAGS=-Wall
+GHC_FLAGS=-Wall -O2
 FILES=$(wildcard ./*.hs)
 
 all: $(TARGET)
@@ -13,8 +13,8 @@ train: $(TARGET)
 $(TARGET): $(FILES)
 	ghc $(GHC_FLAGS) -o $@ $^
 
-zip:
-	zip Makefile README.md $(FILES)
+zip: clean
+	zip xdohun00 Makefile README.md $(FILES)
 
 clean:
-	rm -rf $(TARGET) *.hi *.o
+	rm -rf $(TARGET) *.hi *.o *.zip

@@ -1,6 +1,9 @@
 -- This module contains utilities used for processing program arguments
 -- and the main function.
 --
+-- This source code serves as the submission to the first assignment
+-- of class FLP at FIT, BUT 2023/24
+--
 -- @author  Hung Do
 -- @date    04/03/2024
 -- @file    main.hs
@@ -19,14 +22,16 @@ data Args = Args
   deriving (Show)
 
 -- | Load arguments
-processArgs :: [String] -> IO Args
-processArgs (tT@"-1" : fI : dI : _) = return (Args tT fI dI)
-processArgs (tT@"-2" : fI : _)      = return (Args tT fI "")
+processArgs :: [String] -> Args
+processArgs (tT@"-1" : fI : dI : _) = Args tT fI dI
+processArgs (tT@"-2" : fI : _)      = Args tT fI ""
 processArgs _                       = error "Wrong input"
 
 main :: IO ()
 main = do
-  args <- getArgs >>= processArgs
+  tmp <- getArgs
+  let args = processArgs tmp
+
   if taskType args == "-1"
     then do
       taskOne (firstInput args) (dataInput args)

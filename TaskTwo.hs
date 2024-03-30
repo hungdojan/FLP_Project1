@@ -1,6 +1,9 @@
 -- This module contains function and utilities used to solve the second task of
 -- the assignment.
 --
+-- This source code serves as the submission to the first assignment
+-- of class FLP at FIT, BUT 2023/24
+--
 -- @author  Hung Do
 -- @date    04/06/2024
 -- @file    TaskTwo.hs
@@ -55,12 +58,19 @@ calculateMiddleThreshold [] = []
 calculateMiddleThreshold [a] = [a]
 calculateMiddleThreshold (x : y : xs) = ((x + y) / 2) : calculateMiddleThreshold (y : xs)
 
--- | Return a list of middle threshold for the given feature index in `SingleData`.
+-- | Return a list of middle thresholds for the given feature index in `SingleData`.
 -- Takes three arguments:
 --    `[SingleData]` - The whole dataset.
 --    `Int`          - Chosen index of the feature.
 getMidThresholdAt :: [SingleData] -> Int -> [Float]
 getMidThresholdAt sd ix = calculateMiddleThreshold $ sort $ map ((!! ix) . fst) sd
+
+-- | Return a list of thresholds for the given feature index in `SingleData`.
+-- Takes three arguments:
+--    `[SingleData]` - The whole dataset.
+--    `Int`          - Chosen index of the feature.
+getThresholdAt :: [SingleData] -> Int -> [Float]
+getThresholdAt sd ix = map ((!! ix) . fst) sd
 
 -- | Get list of class names within the dataset.
 getClassNames :: [SingleData] -> [String]
@@ -116,7 +126,7 @@ sortByFeature sd ix = sortBy cmpFnc sd
 --        `Float` - Calculated Gini index value.
 --        `TreeWrapper` - Data format ready to create a Tree structure.
 _giniForSplit :: Int -> Float -> [[SingleData]] -> (Float, TreeWrapper)
-_giniForSplit _ _ [] = (20, (0, 0, [], []))
+_giniForSplit _ _ [] =  (20, (0, 0, [], []))
 _giniForSplit _ _ [_] = (20, (0, 0, [], []))
 _giniForSplit ix th dss@(l : r : _) = (_calculateGini, (ix, th, l, r))
   where
@@ -141,7 +151,6 @@ _giniForThreshold ds ix th = _giniForSplit ix th $ splitSortedDataSet (sortByFea
 -- | Find the split with the smallest Gini index value in the chosen feature index.
 _minGiniForFeature :: [SingleData] -> Int -> (Float, TreeWrapper)
 _minGiniForFeature [] _ = (20, (0, 0, [], []))
---
 _minGiniForFeature ds ix = minFirst $ map (_giniForThreshold ds ix) _features
   where
     _features = toSet $ getMidThresholdAt ds ix

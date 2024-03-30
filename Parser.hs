@@ -1,6 +1,9 @@
 -- This module contains utilities used for parsing an input file containing
 -- a Tree structure.
 --
+-- This source code serves as the submission to the first assignment
+-- of class FLP at FIT, BUT 2023/24
+--
 -- @author  Hung Do
 -- @date    04/03/2024
 -- @file    Parser.hs

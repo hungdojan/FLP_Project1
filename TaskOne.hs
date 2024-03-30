@@ -1,6 +1,9 @@
 -- This module contains function and utilities used to solve the first task of
 -- the assignment.
 --
+-- This source code serves as the submission to the first assignment
+-- of class FLP at FIT, BUT 2023/24
+--
 -- @author  Hung Do
 -- @date    04/06/2024
 -- @file    TaskOne.hs
@@ -48,29 +51,22 @@ createLeafFromData [_]                 = Nothing
 createLeafFromData (_ : className : _) = Just $ Leaf className
 
 loadTreeFromFile :: Handle -> Int -> IO (Maybe (Tree Int Float String))
-loadTreeFromFile handle lvl = do
-  eof <- hIsEOF handle
+loadTreeFromFile h lvl = do
+  eof <- hIsEOF h
   if eof
     then return Nothing
     else do
       -- is not EOF
-      line <- hGetLine handle
+      line <- hGetLine h
       let (lineWithoutIndent, indentSize) = removeIndent line
       (valid, _data@(tType : _)) <- parseLine lineWithoutIndent
       -- check if input line has a valid format and the data is well indented
       if valid && lvl == indentSize `div` 2
-        then do
-          if tType == "Leaf"
-            then return $ createLeafFromData _data
-            else
-              if tType == "Node"
-                then do
-                  createNodeFromData handle _data lvl
-                else do
-                  print line
-                  return Nothing -- error "Tree type not recognized"
+        then case tType of
+          "Leaf" -> return $ createLeafFromData _data
+          "Node" -> createNodeFromData h _data lvl
+          _      -> return Nothing
         else do
-          print line
           return Nothing -- error "Invalid input file"
 
 -- | Task 1 logic.
@@ -88,7 +84,6 @@ taskOne fInput dInput = do
     then do
       dataInputContent <- readFile dInput
       forM_ (lines dataInputContent) $ \x -> do
-        let stripValues = map (strip (== ' ')) (split x ',')
-            values = map (\_x -> (read _x :: Float)) stripValues
-        putStrLn $ getClass values $ fromJust tree
+        let stripValues = map ((\_x -> (read _x :: Float)) . strip (== ' ')) (split x ',')
+        putStrLn $ getClass stripValues $ fromJust tree
     else putStrLn "I was not able to reconstructed the tree from the file."
